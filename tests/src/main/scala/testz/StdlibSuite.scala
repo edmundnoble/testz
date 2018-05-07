@@ -33,7 +33,7 @@ package testz
 import testz.stdlib._
 
 final class StdlibSuite extends PureSuite {
-  def test[T](test: Test[Function0, T]): T = {
+  def test[T](test: Test[Function0, T]): T =
     test.section("equality assertions")(
       test("assertEqual/assertEqual") { () =>
         assertEqual(assertEqual(1 + 1, 2), Nil)
@@ -54,5 +54,4 @@ final class StdlibSuite extends PureSuite {
         assertEqual(assertEqual(1, 2), List(Failure("1\n\nwas not equal to\n\n2")))
       }
     )
-  }
 }

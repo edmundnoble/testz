@@ -30,19 +30,33 @@
 
 package testz
 
-import scala.concurrent.Await
-import scala.concurrent.duration.Duration
-import scala.concurrent.ExecutionContext.Implicits._
+import z._
+import scalaz._, Scalaz._
+import scalaz.concurrent.Task
 
-import testz.runner._
-
-object Main {
-  def main(args: Array[String]): Unit = {
-    val suites: List[() => Suite] = List(
-      () => new ExhaustiveSuite,
-      () => new ScalazSuite,
-      () => new StdlibSuite
-    )
-    Await.result(Runner(suites), Duration.Inf)
+final class ScalazSuite extends TaskSuite {
+  def test[T](test: Test[Function0, T]): T = {
+    test("z")(() => Nil)
   }
+
+  def openOuterSection: Task[Unit] = Task.delay(println("openOuterSection"))
+  def closeOuterSection: Task[Unit] = Task.delay(println("closeOuterSection"))
+
+  def test[T](test: Test[Task, Task[T]]): Task[T] = Task.suspend {
+    for {
+      _ <- openOuterSection
+      t <- test.section("section")(
+        Task.delay(println("before first test")) >> test("first test") {
+          Task.delay(println("first test")) *>
+            assertEqualNoShow(1, 1).pure[Task]
+        },
+        Task.delay(println("before second test")) >> test("second test") {
+          Task.delay(println("second test")) *>
+            assertEqualNoShow(1, 1).pure[Task]
+        }
+      )
+      _ <- closeOuterSection
+    } yield t
+  }
+
 }

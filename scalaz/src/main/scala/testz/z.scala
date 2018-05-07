@@ -76,7 +76,7 @@ object z {
   abstract class TaskSuite extends Suite {
     def test[T](test: Test[Task, Task[T]]): Task[T]
     def run(implicit ec: ExecutionContext): Future[List[String]] = {
-      type TestEff[A] = ReaderT[Task, List[String], A]
+      type TestEff[A] = List[String] => Task[A]
       val buf = Task.delay(new AtomicReference[List[String]](Nil))
 
       def add(buf: AtomicReference[List[String]], str: String): Unit = {
@@ -90,7 +90,7 @@ object z {
             (assertion: Task[List[TestError]]
             ): Task[TestEff[Unit]] = {
             // todo: catch exceptions
-            Task.now(ReaderT((ls: List[String]) =>
+            Task.now((ls: List[String]) =>
               assertion.attempt.map { r =>
                 val out: List[TestError] = r match {
                   case \/-(result) =>
@@ -100,7 +100,7 @@ object z {
                 }
                 add(buf, Suite.printTest(name :: ls, out))
               }
-            ))
+            )
           }
           def section
             (name: String)
@@ -109,17 +109,17 @@ object z {
               tests: Task[TestEff[Unit]]*
             ): Task[TestEff[Unit]] = {
             NonEmptyList(test1, tests: _*).foldLeft1 {
-              // execute sections,
-              ^(_, _) {
-                // execute tests
-                ^(_, _) { (_, _) => () }
-              }
+              // execute section effect, then section body.
+              // the outer `Task` layer is not used.
+              (firstTest, nextTest) => Task.now((ls: List[String]) => {
+                firstTest.flatMap(_(ls)) >> nextTest.flatMap(_(ls))
+              })
             }
           }
       }
       val pr = Promise[List[String]]()
       buf.flatMap { b =>
-        this.test[TestEff[Unit]](test(b)).flatMap(_.run(Nil)) >>
+        this.test[TestEff[Unit]](test(b)).flatMap(_(Nil)) >>
           Task.delay(b.get)
       }.unsafePerformAsync { f => pr.complete(f.fold(scala.util.Failure(_), scala.util.Success(_))) }
       pr.future
